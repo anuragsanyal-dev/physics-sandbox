@@ -1,0 +1,7 @@
+export interface CollisionObject { id: 'a' | 'b'; name: string; mass: number; position: number; velocity: number; radius: number }
+export type CollisionKind = 'elastic' | 'partial' | 'inelastic' | 'custom';
+export interface CollisionOutcome { velocityA: number; velocityB: number; impulseA: number; impulseB: number; momentumBefore: number; momentumAfter: number; kineticEnergyBefore: number; kineticEnergyAfter: number; centerOfMassVelocityBefore: number; centerOfMassVelocityAfter: number; restitution: number }
+export interface CollisionEvent { time: number; position: number; beforeA: CollisionObject; beforeB: CollisionObject; afterA: CollisionObject; afterB: CollisionObject; outcome: CollisionOutcome }
+export interface CollisionState { time: number; objectA: CollisionObject; objectB: CollisionObject; restitution: number; collided: boolean; event: CollisionEvent | null }
+export interface CollisionAnalysis extends CollisionOutcome { deltaMomentum: number; deltaKineticEnergy: number; kineticRetainedPercent: number; kineticConvertedPercent: number; momentumErrorPercent: number; centerOfMassPositionBefore: number; centerOfMassPositionAfter: number }
+export interface CollisionSample { time: number; xA: number; xB: number; xCM: number; vA: number; vB: number; vCM: number; pA: number; pB: number; pTotal: number; keA: number; keB: number; keTotal: number; collided: number; impulseA: number; impulseB: number; restitution: number }

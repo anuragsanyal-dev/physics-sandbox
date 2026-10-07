@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest';
+import { solveCollision, stepCollision, createCollisionState, validateCollisionParameters } from './collision1d';
+import { analyzeCollision } from './collisionAnalysis';
+import { collisionPreset } from '../../labs/collisions/collisionPresets';
+import type { CollisionObject } from './types';
+const obj=(id:'a'|'b',mass:number,position:number,velocity:number,radius=.5):CollisionObject=>({id,name:id.toUpperCase(),mass,position,velocity,radius});
+describe('1D collision physics',()=>{
+ it('exchanges equal-mass velocities in an elastic impact',()=>{const o=solveCollision(1,1,5,0,1);expect(o.velocityA).toBeCloseTo(0);expect(o.velocityB).toBeCloseTo(5)});
+ it('reverses equal-mass head-on velocities',()=>{const o=solveCollision(1,1,5,-5,1);expect(o.velocityA).toBeCloseTo(-5);expect(o.velocityB).toBeCloseTo(5)});
+ it('matches the unequal-mass analytical solution',()=>{const o=solveCollision(2,3,6,-1,.5);expect(o.velocityA).toBeCloseTo(-.3);expect(o.velocityB).toBeCloseTo(3.2)});
+ it('sticks objects together for e=0',()=>{const o=solveCollision(2,3,5,0,0),v=10/5;expect(o.velocityA).toBeCloseTo(v);expect(o.velocityB).toBeCloseTo(v)});
+ it('handles a partially inelastic collision',()=>{const o=solveCollision(1,1,5,0,.5);expect(o.velocityA).toBeCloseTo(1.25);expect(o.velocityB).toBeCloseTo(3.75)});
+ it('maps analytical outcomes correctly when B begins left of A',()=>{const a=obj('a',1,1,-2),b=obj('b',1,-1,0);const s=createCollisionState(a,b,1),n=stepCollision(s,1);expect(n.event?.afterA.velocity).toBeCloseTo(0);expect(n.event?.afterB.velocity).toBeCloseTo(-2);expect(n.event?.outcome.impulseA).toBeCloseTo(2);expect(n.event?.outcome.impulseB).toBeCloseTo(-2)});
+ it('conserves momentum for several mass and restitution values',()=>{for(const [m1,m2,u1,u2,e] of [[1,4,8,1,.2],[3,2,4,-3,.75],[.5,7,12,2,0],[5,1,4,0,1]]){const o=solveCollision(m1!,m2!,u1!,u2!,e!);expect(o.momentumAfter).toBeCloseTo(o.momentumBefore,10)}});
+ it('conserves kinetic energy in elastic impacts',()=>{const o=solveCollision(2,3,6,-1,1);expect(o.kineticEnergyAfter).toBeCloseTo(o.kineticEnergyBefore,10)});
+ it('reduces translational kinetic energy in a nontrivial inelastic impact',()=>{const o=solveCollision(2,3,6,-1,.5);expect(o.kineticEnergyAfter).toBeLessThan(o.kineticEnergyBefore)});
+ it('recovers the requested coefficient of restitution',()=>{const e=.37,o=solveCollision(2,5,9,1,e);expect((o.velocityB-o.velocityA)/(9-1)).toBeCloseTo(e,12)});
+ it('applies equal and opposite impulses',()=>{const o=solveCollision(2,3,6,-1,.5);expect(o.impulseA).toBeCloseTo(-12.6);expect(o.impulseB).toBeCloseTo(12.6);expect(o.impulseA+o.impulseB).toBeCloseTo(0,12)});
+ it('preserves center-of-mass velocity',()=>{const o=solveCollision(2,3,6,-1,.5);expect(o.centerOfMassVelocityBefore).toBeCloseTo(1.8);expect(o.centerOfMassVelocityAfter).toBeCloseTo(1.8)});
+ it('resolves a moving target collision',()=>{const p=collisionPreset('moving-target');let s=createCollisionState(p.a,p.b,p.restitution);for(let i=0;i<300&&!s.collided;i++)s=stepCollision(s,.01);expect(s.collided).toBe(true);expect(s.event?.outcome.restitution).toBe(.8);expect(s.event?.outcome.momentumAfter).toBeCloseTo(s.event!.outcome.momentumBefore)});
+ it('does not collide while overlapping objects are moving apart',()=>{const s=createCollisionState(obj('a',1,0,-2),obj('b',1,.5,2),1),n=stepCollision(s,.1);expect(n.collided).toBe(false);expect(n.objectA.velocity).toBe(-2);expect(n.objectB.velocity).toBe(2)});
+ it('interpolates high-speed contact and prevents tunneling',()=>{const s=createCollisionState(obj('a',1,-2,100),obj('b',1,2,-100),1),n=stepCollision(s,.1);expect(n.collided).toBe(true);expect(n.event?.time).toBeCloseTo(.015);expect(n.objectA.position).toBeLessThan(n.objectB.position);expect(n.objectA.velocity).toBe(-100);expect(n.objectB.velocity).toBe(100)});
+ it('resolves a physical impact only once',()=>{const s=createCollisionState(obj('a',1,-1,2),obj('b',1,1,0),.5),first=stepCollision(s,.5),second=stepCollision(first,.5);expect(first.collided).toBe(true);expect(second.event).toBe(first.event);expect(second.objectA.velocity).toBe(first.objectA.velocity);expect(second.objectB.velocity).toBe(first.objectB.velocity)});
+ it('resolves initially touching approaching bodies at t=0',()=>{const s=createCollisionState(obj('a',1,-.5,2),obj('b',1,.5,0),1),n=stepCollision(s,.01);expect(n.event?.time).toBe(0)});
+ it('rejects nonpositive/nonfinite masses and invalid restitution',()=>{const a=obj('a',1,0,2),b=obj('b',1,2,0);for(const m of[0,-1,Infinity,NaN])expect(validateCollisionParameters({...a,mass:m},b,1).length).toBeGreaterThan(0);for(const e of[-.01,1.01,Infinity,NaN])expect(validateCollisionParameters(a,b,e).length).toBeGreaterThan(0);expect(()=>solveCollision(1,1,1,0,2)).toThrow()});
+ it('reports the requested analytic comparison values and recovers restitution',()=>{const a=obj('a',2,0,6),b=obj('b',3,2,-1),o=solveCollision(2,3,6,-1,.5),analysis=analyzeCollision(a,b,o),recovered=(o.velocityB-o.velocityA)/(6-(-1));expect(o.velocityA).toBeCloseTo(-.3);expect(o.velocityB).toBeCloseTo(3.2);expect(o.momentumBefore).toBe(9);expect(o.momentumAfter).toBeCloseTo(9);expect(o.kineticEnergyBefore).toBe(37.5);expect(o.kineticEnergyAfter).toBeCloseTo(15.45);expect(analysis.deltaKineticEnergy).toBeCloseTo(-22.05);expect(o.impulseA).toBeCloseTo(-12.6);expect(o.impulseB).toBeCloseTo(12.6);expect(o.impulseA+o.impulseB).toBeCloseTo(0,12);expect(analysis.centerOfMassVelocityBefore).toBeCloseTo(1.8);expect(analysis.centerOfMassVelocityAfter).toBeCloseTo(1.8);expect(recovered).toBeCloseTo(.5,12)});
+});
+

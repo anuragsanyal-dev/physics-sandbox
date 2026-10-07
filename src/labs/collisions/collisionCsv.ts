@@ -1,0 +1,4 @@
+import type { CollisionSample } from '../../physics/collisions/types';
+const columns=['time_s','object_a_position_m','object_b_position_m','object_a_velocity_m_per_s','object_b_velocity_m_per_s','object_a_momentum_kg_m_per_s','object_b_momentum_kg_m_per_s','total_momentum_kg_m_per_s','object_a_kinetic_energy_J','object_b_kinetic_energy_J','total_kinetic_energy_J','center_of_mass_position_m','center_of_mass_velocity_m_per_s','collision_occurred','impulse_object_a_N_s','impulse_object_b_N_s','coefficient_of_restitution'];
+/** Serializes sampled state; the collision model is calculated elsewhere. */
+export function collisionCsv(samples:CollisionSample[]):string{return[columns.join(','),...samples.map(s=>[s.time,s.xA,s.xB,s.vA,s.vB,s.pA,s.pB,s.pTotal,s.keA,s.keB,s.keTotal,s.xCM,s.vCM,s.collided,s.impulseA,s.impulseB,s.restitution].map(v=>Number(v).toPrecision(12)).join(','))].join('\n')}

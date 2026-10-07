@@ -1,0 +1,33 @@
+import {describe,it,expect} from 'vitest';import {angularFrequency,equalWaveResultantAmplitude,period,phaseDegreesToRadians,validateWave,waveDisplacement,waveNumber,waveSpeed} from './wave';import {validateString} from './types';import {superpose,beatEnvelope,beatFrequency,beatPeriod} from './superposition';import {fixedStringHarmonic,standingAntinodePositions,standingDisplacement,standingNodePositions} from './standingWave';import {reflectionComponents,reflectionPhaseChange} from './reflection';import {derived,evaluateWave,sampleWave,observationSeries} from './waveAnalysis';import type {WaveParameters} from './types';import {wavePresets} from '../../labs/waves/wavePresets';import {waveCsv,WAVE_CSV_HEADER} from '../../labs/waves/waveCsv';
+const p=(o:Partial<WaveParameters>={}):WaveParameters=>({amplitude:1,frequency:1,wavelength:2,phase:0,direction:'right',...o});
+describe('analytical transverse waves',()=>{
+it('computes period, wave number, angular frequency and speed',()=>{expect(period(2)).toBe(.5);expect(waveNumber(4)).toBeCloseTo(Math.PI/2);expect(angularFrequency(2)).toBeCloseTo(4*Math.PI);expect(waveSpeed(2,4)).toBe(8)});it('validates the specified A=1.5, f=2, lambda=4 single-wave values',()=>{const q=p({amplitude:1.5,frequency:2,wavelength:4}),d=derived(q);expect(d.period).toBe(.5);expect(d.waveNumber).toBeCloseTo(Math.PI/2);expect(d.angularFrequency).toBeCloseTo(4*Math.PI);expect(d.speed).toBe(8);expect(waveDisplacement(q,0,.125)).toBeCloseTo(-1.5)});
+it('evaluates right and left propagation with opposite time signs',()=>{expect(waveDisplacement(p(),.5,.25)).toBeCloseTo(0);expect(waveDisplacement(p({direction:'left'}),.5,.25)).toBeCloseTo(0);expect(waveDisplacement(p(),0,.25)).toBeCloseTo(-1);expect(waveDisplacement(p({direction:'left'}),0,.25)).toBeCloseTo(1)});
+it('converts degrees to radians',()=>expect(phaseDegreesToRadians(90)).toBeCloseTo(Math.PI/2));
+it('adds component waves for superposition',()=>expect(superpose(p(),p({phase:Math.PI/2}),.25,0).resultant).toBeCloseTo(Math.SQRT2));
+it.each([[0,2],[90,Math.SQRT2],[180,0]])('computes equal-wave amplitude at phase %d degrees', (degrees,expected)=>expect(equalWaveResultantAmplitude(1,phaseDegreesToRadians(degrees))).toBeCloseTo(expected,12));
+it('constructive preset doubles the component and resultant envelope',()=>{const q=wavePresets.find(x=>x.id==='constructive')!;expect(superpose(q.wave1,q.wave2,.2,.3).resultant).toBeCloseTo(2*waveDisplacement(q.wave1,.2,.3));expect(equalWaveResultantAmplitude(1,0)).toBe(2)});
+it('destructive preset cancels for multiple x,t samples',()=>{const q=wavePresets.find(x=>x.id==='destructive')!;for(const x of [0,.2,1.3,8])for(const t of [0,.1,1.7])expect(superpose(q.wave1,q.wave2,x,t).resultant).toBeCloseTo(0,12)});
+it('has the expected 90 degree phase amplitude',()=>expect(equalWaveResultantAmplitude(1,Math.PI/2)).toBeCloseTo(Math.SQRT2,12));
+it('matches the closed-form standing wave',()=>expect(standingDisplacement(1,2,1,.25,.1)).toBeCloseTo(2*Math.sin(Math.PI/4)*Math.cos(2*Math.PI*.1)));
+it('places nodes analytically and keeps their displacement zero over time',()=>{expect(standingNodePositions(2,4)).toEqual([0,1,2,3,4]);for(const x of standingNodePositions(2,4))for(const t of [0,.14,.5,1.2])expect(standingDisplacement(1,2,3,x,t)).toBeCloseTo(0,12)});
+it('places antinodes halfway between nodes',()=>expect(standingAntinodePositions(2,4)).toEqual([.5,1.5,2.5,3.5]));
+it.each([[1,8,1,8,2,1],[2,4,2,4,3,2],[3,8/3,3,8/3,4,3],[4,2,4,2,5,4]])('computes fixed-string harmonic n=%i', (n,_l,f,lambda,nodes,antiN)=>{const h=fixedStringHarmonic(4,8,n);expect(h.frequency).toBeCloseTo(f);expect(h.wavelength).toBeCloseTo(lambda);expect(h.nodeCount).toBe(nodes);expect(h.antinodeCount).toBe(antiN)});
+it('computes beat frequency and period',()=>{expect(beatFrequency(4,4.5)).toBe(.5);expect(beatPeriod(4,4.5)).toBe(2)});
+it('beat envelope is analytic and periodic at beat period',()=>{const e=(t:number)=>beatEnvelope(1,1,0,0,0,t,Math.PI,Math.PI,8*Math.PI,9*Math.PI);expect(e(0)).toBe(2);expect(e(2)).toBeCloseTo(2);expect(e(1)).toBeCloseTo(0)});it('beat envelope uses left-travelling phase signs',()=>{const e=(t:number)=>beatEnvelope(1,1,0,0,0,t,Math.PI,Math.PI,8*Math.PI,9*Math.PI,1,1);expect(e(0)).toBe(2);expect(e(2)).toBeCloseTo(2);expect(e(1)).toBeCloseTo(0)});
+it('fixed reflection reverses phase and satisfies fixed boundary',()=>{expect(reflectionPhaseChange('fixed')).toBe(Math.PI);for(const t of [0,.13,.77])expect(reflectionComponents(p(),4,t,4,'fixed').resultant).toBeCloseTo(0,12)});
+it('free reflection has no phase reversal and doubles at the boundary',()=>{expect(reflectionPhaseChange('free')).toBe(0);for(const t of [0,.13,.77]){const c=reflectionComponents(p(),4,t,4,'free');expect(c.reflected).toBeCloseTo(c.incident);expect(c.resultant).toBeCloseTo(2*c.incident)}});
+it('evaluates observation displacement from the analytical wave state',()=>{const v=evaluateWave('superposition',p(),p({phase:Math.PI/2}),.25,.125,'fixed',4);expect(v.resultant).toBeCloseTo(v.wave1+v.wave2)});
+it('samples spatial data and exports numeric CSV values',()=>{const points=sampleWave('superposition',p(),p({phase:Math.PI/2}),.25,0,2,9);expect(points).toHaveLength(9);const rows=waveCsv(points).split('\n');expect(rows[0]).toBe(WAVE_CSV_HEADER);expect(rows[1]!.split(',')).toHaveLength(7);expect(Number.isFinite(Number(rows[1]!.split(',')[4]))).toBe(true)});
+it('samples observation history over the requested time interval',()=>{const rows=observationSeries('beats',p({frequency:4}),p({frequency:4.5}),0,2,5);expect(rows[0]!.time).toBe(0);expect(rows[rows.length-1]!.time).toBe(2);expect(rows).toHaveLength(5)});
+it.each([-1,NaN,Infinity])('rejects invalid amplitude %s',amplitude=>expect(validateWave(p({amplitude})).length).toBeGreaterThan(0));
+it.each([0,-1,NaN,Infinity,11])('rejects invalid frequency %s',frequency=>expect(validateWave(p({frequency})).length).toBeGreaterThan(0));
+it.each([0,-1,NaN,Infinity,11])('rejects invalid wavelength %s',wavelength=>expect(validateWave(p({wavelength})).length).toBeGreaterThan(0));
+it.each([NaN,Infinity,-.1,2*Math.PI+1])('rejects invalid phase %s',phase=>expect(validateWave(p({phase})).length).toBeGreaterThan(0));
+it.each([0,-1,NaN,Infinity])('rejects invalid string length %s',length=>expect(validateString(length,1).length).toBeGreaterThan(0));it.each([0,5,1.5,NaN,Infinity])('rejects invalid harmonic number %s',n=>expect(validateString(4,n).length).toBeGreaterThan(0));it('accepts valid fixed string harmonic inputs',()=>expect(validateString(4,4)).toEqual([]));
+it('rejects non-finite values in both waves',()=>expect(validateWave(p({frequency:Infinity})).length).toBeGreaterThan(0));
+});
+
+
+
+

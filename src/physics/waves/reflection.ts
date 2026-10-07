@@ -1,0 +1,3 @@
+import type {BoundaryType,WaveParameters} from './types';import {angularFrequency,waveNumber} from './wave';
+export function reflectionPhaseChange(boundary:BoundaryType){return boundary==='fixed'?Math.PI:0}
+export function reflectionComponents(p:WaveParameters,x:number,t:number,boundaryPosition:number,boundary:BoundaryType){const k=waveNumber(p.wavelength),w=angularFrequency(p.frequency),xi=x-boundaryPosition,phase=p.phase;const incident=p.amplitude*Math.sin(k*xi-w*t+phase),reflected=(boundary==='fixed'?-1:1)*p.amplitude*Math.sin(-k*xi-w*t+phase);return {incident,reflected,resultant:incident+reflected}}
